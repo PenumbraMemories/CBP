@@ -334,22 +334,29 @@ export default {
           }));
           
           // 加载所有图片数据
-          clips.value.forEach(clip => {
+          for (const clip of clips.value) {
             if (clip.type === 'image' && clip.imageFilename) {
-              ipcRenderer.invoke('get-image', clip.imageFilename).then(imageData => {
-                clip.imageData = imageData;
-              });
+              clip.imageData = await ipcRenderer.invoke('get-image', clip.imageFilename);
             }
-          });
+          }
         }
       } catch (error) {
         console.error('获取剪切板数据失败:', error);
       }
       
       // 监听剪切板更新事件
-      ipcRenderer.on('clipboard-update', (event, data) => {
+      ipcRenderer.on('clipboard-update', async (event, data) => {
         // 检查是否已存在相同内容
-        const exists = clips.value.some(clip => clip.content === data.content);
+        let exists;
+        if (data.type === 'image' && data.imageFilename) {
+          // 对于图片，使用imageFilename检查是否已存在
+          exists = clips.value.some(clip => 
+            clip.type === 'image' && clip.imageFilename === data.imageFilename
+          );
+        } else {
+          // 对于文本，使用content检查是否已存在
+          exists = clips.value.some(clip => clip.content === data.content);
+        }
         
         if (!exists) {
           // 添加新记录
@@ -367,9 +374,14 @@ export default {
           
           // 如果是图片，获取图片数据
           if (data.type === 'image' && data.imageFilename) {
-            ipcRenderer.invoke('get-image', data.imageFilename).then(imageData => {
-              newClip.imageData = imageData;
-            });
+            try {
+              newClip.imageData = await ipcRenderer.invoke('get-image', data.imageFilename);
+              if (!newClip.imageData) {
+                console.error('获取图片数据失败:', data.imageFilename);
+              }
+            } catch (error) {
+              console.error('获取图片数据失败:', error);
+            }
           }
           
           clips.value.unshift(newClip);

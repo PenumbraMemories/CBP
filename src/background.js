@@ -85,7 +85,7 @@ function startClipboardMonitoring() {
   lastClipboardImage = clipboard.readImage();
   
   // 每秒检查一次剪切板变化
-  setInterval(() => {
+  const checkClipboard = () => {
     const currentContent = clipboard.readText();
     const currentImage = clipboard.readImage();
     const hasImage = !currentImage.isEmpty();
@@ -135,33 +135,50 @@ function startClipboardMonitoring() {
         const imageFilename = saveImageToFile(currentImageBuffer);
         
         if (imageFilename) {
-          // 添加图片记录
-          clips.unshift({
-            content: '图片',
-            timestamp: new Date().toISOString(),
-            isFavorite: false,
-            expanded: false,
-            isOverflow: false,
-            type: 'image',
-            imageFilename: imageFilename
-          });
-          
-          // 保存到文件
-          saveClipsData();
-          
-          // 通知渲染进程更新UI
-          if (mainWindow) {
-            mainWindow.webContents.send('clipboard-update', {
+          // 检查是否已存在相同图片
+          const exists = clips.some(clip => 
+            clip.type === 'image' && clip.imageFilename === imageFilename
+          );
+
+          if (!exists) {
+            // 添加图片记录
+            clips.unshift({
               content: '图片',
               timestamp: new Date().toISOString(),
+              isFavorite: false,
+              expanded: false,
+              isOverflow: false,
               type: 'image',
               imageFilename: imageFilename
             });
+          
+            // 保存到文件
+            saveClipsData();
+          
+            // 通知渲染进程更新UI
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              try {
+                mainWindow.webContents.send('clipboard-update', {
+                  content: '图片',
+                  timestamp: new Date().toISOString(),
+                  type: 'image',
+                  imageFilename: imageFilename
+                });
+              } catch (error) {
+                console.error('通知渲染进程更新UI失败:', error);
+              }
+            }
           }
         }
       }
     }
-  }, 1000);
+  };
+
+  // 立即执行一次检查
+  checkClipboard();
+
+  // 每秒检查一次剪切板变化
+  setInterval(checkClipboard, 1000);
 }
 
 async function createWindow() {
